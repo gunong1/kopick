@@ -26,6 +26,14 @@
 
 ---
 
+## 구현 현황
+| Step | 상태 | 비고 |
+|---|---|---|
+| 1 프로젝트 셋업 | 완료 | 로컬 `pacto/` (Expo SDK 57, Router, TS strict, ESLint, Jest). Git 원격 미연결 |
+| 2 domain 로직 | 완료 | 단위 테스트 26개 (D-87 / D-57 / D-268, 월환산 114,000원 등 검증) |
+| 3 디자인 시스템 | 완료 | `src/theme`, `src/components/ui`, `src/components/pacto` |
+| 4 Mock 화면 | 완료 | 필수 흐름 10단계 웹 E2E 통과 (`e2e/web-flow.js`). 실기기 UX 검토 대기 |
+
 ## 0.5 제품 포지셔닝 (최우선 기준)
 
 PACTO는 **"내 모든 계약이 모이고, 계약이 끝날 때까지 관리되는 개인용 계약 지갑"**이다. "AI 계약서 분석 앱"이 아니다.
@@ -196,7 +204,8 @@ export type Extracted<T> = {
 ### 2.4 일정(이벤트) 모델링 전략
 
 - **정기 결제는 행을 무한히 만들지 않는다.** `contract_payments`(결제 규칙) → 조회 범위(예: 이번 달)에서 domain 함수 `expandPayments(range)`로 전개.
-- **단발성 이벤트**(시작/종료/해지통보/갱신/사용자 일정)는 `contract_events`에 행으로 저장. 시스템 생성 이벤트는 `source='system'`이며 계약 수정 시 `regenerate_system_events(contract_id)`로 재생성(사용자 이벤트는 유지).
+- **시작/종료/해지통보/자동갱신 일정은 저장하지 않고 계약 정보에서 계산**한다 (`domain/schedule.ts: contractSchedule`). *(Step 2 구현 중 변경: 저장 후 재생성 방식은 자동갱신 회차가 날짜에 따라 바뀌어 불일치가 생기므로 계산 방식 채택. 서버 알림 배치도 같은 domain 함수를 사용)*
+- `contract_events`에는 **사용자 일정과 AI 제안으로 추가된 일정만** 저장 (`source='user'|'ai'`).
 - 캘린더 = `expandPayments(month) ∪ contract_events(month)`.
 - 같은 전개 로직을 서버(알림 배치)에서도 써야 하므로 domain 코드는 **RN/Node/Deno 의존성 없는 순수 TS**로 작성. (Edge Function 번들에서 `supabase/functions` 바깥 파일을 import 가능한지는 CLI 버전에 따라 확인 필요 — 불가하면 빌드 스크립트로 `_shared/domain`에 복사)
 
@@ -706,6 +715,7 @@ pacto/
 │  ├─ index.tsx                        # 세션 게이트 → (auth) or (tabs)
 │  ├─ (auth)/  _layout.tsx onboarding.tsx welcome.tsx sign-in.tsx sign-up.tsx reset-password.tsx
 │  ├─ (tabs)/  _layout.tsx index.tsx contracts.tsx add.tsx(+ 버튼, 등록 모달 오픈) calendar.tsx my.tsx   # AI 탭 없음
+│  │          # ※ Expo SDK 57 템플릿 기준 라우트 폴더는 `src/app/` (아래 src/와 같은 레벨에 둠)
 │  ├─ register/  _layout.tsx(modal) index.tsx photos.tsx analyzing.tsx review.tsx manual.tsx
 │  ├─ contract/[id]/  index.tsx edit.tsx document.tsx notifications.tsx event.tsx ask.tsx(P2)
 │  ├─ notifications.tsx
