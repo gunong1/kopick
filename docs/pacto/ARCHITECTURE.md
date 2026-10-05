@@ -1,10 +1,49 @@
 # PACTO(팩토) — V1 설계 문서
 
+> **PACTO — 내 모든 계약이 모이는 곳.**
 > "계약서를 넣어두세요. 중요한 순간은 PACTO가 기억합니다."
+> UX 원칙: **"사용자가 계약서를 다시 펼쳐보지 않아도 되게 만든다."**
 
-- 문서 상태: **설계안 (승인 대기)**. 이 문서가 승인되기 전에는 대규모 구현을 하지 않는다.
+- 문서 상태: **전체 구조 승인 (2026-10-05) + 개정 1 반영**. 현재 구현 범위는 Step 1~4.
 - 작성 기준일: 2026-10-05
 - 범위: 아키텍처, 화면 목록, DB 스키마, 폴더 구조, V1 Task 분해, 기술/보안 리스크
+
+## 개정 1 (2026-10-05) 요약
+| # | 변경 | 반영 위치 |
+|---|---|---|
+| 1 | 포지셔닝: "AI 계약서 분석 앱" → **"개인용 계약 지갑"**. AI는 입력 비용을 줄이는 보조 엔진 | §0.5 |
+| 2 | 하단 탭에서 AI 탭 제거 → **홈 / 계약 / (+) / 캘린더 / MY**. AI는 계약 상세 안에서만 | §3 |
+| 3 | 홈 우선순위: 지출 → 지금 처리할 계약 → 곧 종료/갱신 → 상태 요약 → 최근 등록 → (보조) AI 확인 | §3.2 탭 > 홈 화면 구성 순서 |
+| 4 | 계약을 자산/대상 단위로 묶는 `contract_groups` 확장 여지 | §4.8 |
+| 5 | V1(P0) 테이블을 6개로 축소, 나머지는 P1/필요 시 | §4.0 |
+| 6 | AI 체크 = 위험도 평가가 아니라 **일정 관리로 연결**. 금지/권장 표현 고정 | §2.6 |
+| 7 | 홈 메인 금액 = **이번 달 실제 결제 예정액** (보조: 월평균, 연간 예상) | §1.2-A |
+| 8 | 로그인 V1: 이메일 / Apple / Google. Kakao는 P1 이후 | §3.1 |
+| 9 | Step 1~4는 mock AI provider만 사용. 실제 LLM은 UI/UX 검토 후 | §2.2, §10 |
+| 10 | 브랜드: 금융/자산관리 앱 톤 (화이트 + 딥 네이비) | §6 |
+| 11 | 구현 범위: Step 1~4만. Supabase/실제 AI/파일 업로드/Push 미연결 | §10 |
+| 12 | 저장소: KOPICK과 분리된 신규 저장소 `pacto` 전제 | §0, §5 |
+
+---
+
+## 0.5 제품 포지셔닝 (최우선 기준)
+
+PACTO는 **"내 모든 계약이 모이고, 계약이 끝날 때까지 관리되는 개인용 계약 지갑"**이다. "AI 계약서 분석 앱"이 아니다.
+
+제품 우선순위 (기능 충돌 시 위가 이긴다):
+1. 계약서 보관
+2. 계약정보 자동정리
+3. 계약 일정 관리
+4. 월/연간 계약 지출 관리
+5. 종료/갱신/해지 통보기한 관리
+6. 계약 이력 축적
+7. AI 주의조항 체크
+8. AI 질문
+
+설계/문구 결정 기준
+- 첫인상은 "금융 지갑 같은 계약 관리 앱". **AI라는 단어를 탭·홈 상단·온보딩 첫 장에 전면 배치하지 않는다.** (등록 과정의 "자동으로 정리해드려요" 정도의 표현은 허용)
+- 모든 화면은 "사용자가 지금 해야 할 행동"(해지 통보, 결제, 갱신 확인)을 먼저 보여준다.
+- 이 철학에 맞지 않는 기능은 V1 우선순위를 낮춘다.
 
 ---
 
@@ -12,7 +51,7 @@
 
 | 항목 | 확인 결과 | 영향 |
 |---|---|---|
-| 저장소 | `gunong1/kopick` — **KOPICK(상품 비교 웹, Next.js 16 + Tailwind)** 프로젝트. 커밋 1개(`first commit`) | PACTO와 **무관한 코드베이스**. 같은 저장소에 섞으면 빌드·의존성·배포가 꼬임 → 저장소 결정 필요 (§9 질문 1) |
+| 저장소 | `gunong1/kopick` — **KOPICK(상품 비교 웹, Next.js 16 + Tailwind)** 프로젝트 | PACTO와 무관. **결정: PACTO는 신규 저장소 `pacto`로 운영.** 현재 세션은 `pacto` 저장소에 접근할 수 없어(존재하지 않음) 로컬 프로젝트로 먼저 생성하고 Git 원격 연결은 보류. 이 설계 문서만 임시로 kopick 브랜치에 보관 |
 | 런타임 | Node v22.22.0, npm 10.9.4 | Expo 개발에 충분 |
 | 최신 패키지(npm registry, 2026-10-05 조회) | `expo` 57.0.26 (SDK 57), `expo-router` 57.x, `react-native` 0.87.1, `@supabase/supabase-js` 2.117.2, `@tanstack/react-query` 5.104.1, `react-hook-form` 7.89.0, `zod` 4.6.5, `zustand` 5.0.15 | 실제 설치 시 `npx create-expo-app` / `npx expo install`로 SDK 호환 버전을 고정. 위 숫자는 조회값일 뿐, SDK 57과 각 라이브러리의 호환성은 설치 단계에서 재확인 필요 |
 | 컨테이너 | 클라우드 리눅스 컨테이너. iOS 시뮬레이터/Android 에뮬레이터 없음 | 여기서는 타입체크·단위테스트·웹 프리뷰(`expo start --web`)까지 검증 가능. 실기기 검증은 사용자 기기(Expo Go 또는 dev build)에서 필요 |
@@ -29,13 +68,14 @@ PACTO는 "AI 법률 분석기"가 아니라 **계약 생애주기 관리 도구*
 1. **확정 데이터와 AI 추정 데이터를 분리 저장한다.** AI 결과는 `analysis_jobs.result`(초안)에만 존재하고, 사용자가 확인/수정 후 저장한 값만 `contracts` 등 본 테이블에 들어간다.
 2. **AI 없이도 앱이 완전히 동작해야 한다.** 직접 입력 경로 = AI 경로의 마지막 단계(확인 폼)와 동일한 폼을 재사용.
 3. **날짜·금액 계산은 순수 함수(domain 레이어)로 분리**하여 테스트한다. D-Day, 상태, 결제일 전개, 월 지출이 이 앱의 핵심 로직이며 버그가 곧 신뢰 손실이다.
-4. **AI 표현 수위**: `일반 / 확인 필요 / 주의 필요` 3단계만 사용. "불법", "무효", "유리/불리" 같은 법적 판단 표현은 프롬프트와 후처리 양쪽에서 금지.
+4. **AI 표현 수위**: `일반 / 확인 필요 / 주의 필요` 3단계만 사용. 금지·권장 표현은 §2.6.
+5. **AI는 보조 엔진**: AI 결과는 "관리 데이터(날짜·금액·일정)로 연결될 때" 가치가 있다. 위험도 평가 자체를 목적으로 하지 않는다.
 
 ### 1.2 요구사항에서 모호하거나 결정이 필요한 부분 (제안 포함)
 
 | # | 이슈 | 제안 (기본값) |
 |---|---|---|
-| A | **"이번 달 지출"의 정의**: 실제 이번 달 결제 예정액 vs 월 환산액(연납 보험료 ÷ 12) | 홈 메인 숫자 = **이번 달 실제 결제 예정 합계**, 보조 = 월평균 환산. 예시 "자동차보험 월환산 114,000원"은 보조 지표로 표시. (§9 질문 2) |
+| A | **"이번 달 지출"의 정의** | **확정**: 홈 메인 = **이번 달 실제 결제 예정액**("10월 계약 지출"). 연납 보험료는 실제 결제되는 달에만 포함. 보조 지표 = 월평균 계약비(연간 예상 ÷ 12), 연간 예상 계약지출(향후 12개월, 종료 계약 제외) |
 | B | **계약 상태를 저장할지 계산할지** | 사용자가 정하는 것(진행/해지)만 저장(`lifecycle`), 나머지(종료 임박/갱신 예정/종료)는 날짜로 **계산**. 저장하면 매일 배치로 갱신해야 하고 불일치가 생김 |
 | C | **"종료 임박" 기준일** | 기본 30일, 상수로 관리 (설정화는 P1) |
 | D | **자동갱신 계약이 종료일을 지나면?** | 원래 `end_date`는 보존, `renewal_period_months`로 **현재 회차 종료일을 계산**해 표시하고 "자동갱신된 것으로 추정됩니다. 확인해주세요" 배너를 띄움. 임의로 DB 값을 바꾸지 않음 |
@@ -63,7 +103,7 @@ PACTO는 "AI 법률 분석기"가 아니라 **계약 생애주기 관리 도구*
        ┌──────────────┐             ┌──────────────────┐           ┌────────────────────────┐
        │ Supabase Auth│             │ PostgreSQL + RLS │           │ Storage (private bucket│
        │ (email/Apple │             │ tables, views,   │           │ `contract-files`)      │
-       │  /Kakao/...) │             │ RPC(save_contract)│           │ 경로: {uid}/{docId}/…  │
+       │  /Google)    │             │ RPC(save_contract)│           │ 경로: {uid}/{docId}/…  │
        └──────────────┘             └────────┬─────────┘           └───────────┬────────────┘
                                              │                                 │
                     ┌────────────────────────┴───── Edge Functions (Deno) ─────┴───────────┐
@@ -120,6 +160,7 @@ export type Extracted<T> = {
 };
 ```
 
+- **Step 1~4: 앱 내부 `MockAIProvider`만 사용** (같은 인터페이스를 앱 쪽 `src/data/ai/`에 두고, Step 9에서 Edge Function 호출 구현체로 교체). 실제 LLM은 UI/UX 검토 완료 후, PDF/사진 추출 성능 비교 테스트를 거쳐 Gemini/OpenAI/Claude 중 선택.
 - 선택: Edge Function 환경변수 `AI_PROVIDER=gemini|openai|anthropic|mock`, `AI_MODEL=...`.
 - **출력은 반드시 Zod 스키마로 검증**. 실패 시 1회 재시도 후 `failed`로 기록, 사용자에게는 "직접 입력으로 계속하기" 제공.
 - `prompt_version`을 job에 기록 → 프롬프트 변경 시 품질 비교 가능.
@@ -170,18 +211,53 @@ end_date & (end_date − today) ≤ 30                        → 종료 임박
 end_date 없음(무기한)                                     → 진행중 (D-Day 미표시)
 ```
 
+### 2.6 AI 체크의 역할: "위험 평가"가 아니라 "일정 연결"
+
+AI 체크는 보조 기능이다. 가장 중요한 역할은 계약서 속 조건을 **실제 관리 행동으로 바꾸는 것**이다.
+
+```
+원문: "계약 종료 30일 전까지 해지 의사를 통지하지 않으면 12개월 자동 연장"
+ → 추출: auto_renewal=true, renewal_period_months=12, termination_notice_days=30
+ → 계산: 해지 통보기한 = 현재 회차 종료일 − 30일 (domain/status.ts)
+ → 제안: "해지 통보기한(12월 1일)을 캘린더에 등록할까요?"  [등록]
+ → 저장 시: contract_events(termination_notice) 생성 + 알림 대상
+```
+
+표현 규칙 (프롬프트 지시 + 서버 후처리 금칙어 검사 + UI 고정 문구 3중 적용)
+
+| 금지 | 권장 |
+|---|---|
+| 불법입니다 / 무효입니다 / 독소조항입니다 | 확인이 필요합니다 |
+| 사용자에게 불리합니다 / 유리합니다 | 다음과 같이 기재되어 있습니다 |
+| 반드시 손해를 봅니다 | 자동갱신 조건이 포함되어 있습니다 |
+| (법적 효력·위법성에 대한 모든 단정) | 해지 통보기한을 확인해주세요 / 위약금 관련 조건이 있습니다 |
+
+- severity 라벨: `일반 / 확인 필요 / 주의 필요` — "위험", "경고" 단어 미사용.
+- 모든 AI 체크 카드 하단 고정 문구: "계약서 내용을 정리한 것이며 법률 자문이 아닙니다."
+- Step 1~4의 mock 데이터 문구도 이 규칙을 따른다 (`src/domain/aiCopy.ts`의 금칙어 검사 유닛 테스트로 보장).
+
 ---
 
 ## 3. 화면 목록
 
 우선순위: P0 = V1 필수, P1 = V1 후반/직후, P2 = 자리만.
 
+### 3.0 하단 네비게이션 (개정 1)
+
+**홈 / 계약 / (+) / 캘린더 / MY** — 중앙 (+)는 탭이 아니라 등록 모달을 여는 버튼.
+
+- 선택 이유: 계약 지갑의 핵심 입력 행동(계약 넣기)을 항상 한 번에 접근 가능하게. "알림" 탭 대안은 V1에 Push가 없어 내용이 빈약하므로, 알림함은 홈 상단 우측 벨 아이콘으로 진입.
+- **AI 탭 없음.** AI 기능은 계약 상세 안의 섹션으로만 제공:
+  - "자동으로 정리된 계약정보" (확인/수정 이력)
+  - "확인이 필요한 조항" (→ 일정 등록 제안)
+  - "이 계약에 질문하기" (P2, V1은 진입점 + 준비중 안내)
+
 ### 3.1 인증/온보딩
 | ID | 화면 | 경로 | P | 비고 |
 |---|---|---|---|---|
 | S01 | 스플래시/세션 게이트 | `app/index.tsx` | P0 | 세션 유무로 분기 |
 | S02 | 온보딩 (3장 슬라이드) | `(auth)/onboarding` | P0 | 보관 → 자동정리 → 일정/알림 |
-| S03 | 로그인/가입 선택 | `(auth)/welcome` | P0 | Apple / Kakao / 이메일 (§9 질문 3) |
+| S03 | 로그인/가입 선택 | `(auth)/welcome` | P0 | **이메일 / Apple / Google** (Kakao는 P1 이후). Step 1~4에서는 UI만, 실제 인증은 Step 6 |
 | S04 | 이메일 로그인 | `(auth)/sign-in` | P0 | |
 | S05 | 이메일 가입 | `(auth)/sign-up` | P0 | 약관·개인정보·**AI 처리(국외 이전 포함) 동의** |
 | S06 | 비밀번호 재설정 | `(auth)/reset-password` | P0 | |
@@ -190,11 +266,22 @@ end_date 없음(무기한)                                     → 진행중 (D-
 ### 3.2 탭
 | ID | 화면 | 경로 | P | 주요 구성 |
 |---|---|---|---|---|
-| T1 | 홈 | `(tabs)/index` | P0 | 인사 · 이번 달 계약 지출(카테고리 분해) · 상태 요약칩(진행중/종료예정/갱신예정) · 다가오는 일정(D-Day) · 최근 계약 · 확인 필요 AI 체크 |
+| T1 | 홈 | `(tabs)/index` | P0 | 아래 "홈 화면 구성 순서" 참조 |
 | T2 | 계약 목록 | `(tabs)/contracts` | P0 | 상태 세그먼트, 카테고리 필터, 정렬(D-Day/최근/금액), 검색(P1) |
+| (+) | 계약 등록 | `register/` 모달 | P0 | 탭바 중앙 버튼 |
 | T3 | 캘린더 | `(tabs)/calendar` | P0 | 월 그리드 + 날짜별 점(유형 색) · 하단 선택일 이벤트 리스트 · 월 합계 |
-| T4 | AI | `(tabs)/ai` | P1 UI / P2 기능 | 계약 검색 + "질문하기"(P2 placeholder) + 확인 필요 항목 모아보기 |
 | T5 | MY | `(tabs)/my` | P0 | 프로필, 알림 설정, 보안(앱 잠금 P1), 약관, 데이터 내보내기(P2), 로그아웃, 회원 탈퇴 |
+
+#### 홈 화면 구성 순서 (개정 1)
+
+| 순서 | 섹션 | 예 | 비고 |
+|---|---|---|---|
+| 1 | **이번 달 실제 계약 지출** | "10월 계약 지출 ₩1,250,300" + 보조(월평균, 연간 예상) + 카테고리 분해 | 화면에서 가장 큰 숫자 |
+| 2 | **지금 처리해야 할 계약** | "이번 주 확인할 계약 2건 — 헬스장 해지 통보기한 D-7 / 자동차보험 만료 D-31" | 해지 통보기한·결제·갱신 등 행동이 필요한 항목, 14일 이내(기본값) 또는 기한 임박순 |
+| 3 | 곧 종료/갱신되는 계약 | "인터넷 D-83 / 정수기 D-152" | 종료일 기준 정렬 |
+| 4 | 계약 상태 요약 | 진행중 12 · 종료 예정 2 · 갱신 예정 1 | 탭하면 목록 필터로 이동 |
+| 5 | 최근 등록 계약 | 3건 | |
+| 6 | (보조) 확인이 필요한 조항 | "확인이 필요한 조항 1건" 한 줄 링크 | 핵심 콘텐츠 아님. 없으면 숨김 |
 
 ### 3.3 계약 등록 (모달 스택)
 | ID | 화면 | 경로 | P |
@@ -210,7 +297,7 @@ end_date 없음(무기한)                                     → 진행중 (D-
 ### 3.4 계약 상세
 | ID | 화면 | 경로 | P |
 |---|---|---|---|
-| D1 | 계약 상세 (헤더: 이름/상대방/상태/D-Day · 금액 · 결제 · 갱신/해지통보 · 일정 · AI 체크 · 메모 · 원본) | `contract/[id]/index` | P0 |
+| D1 | 계약 상세 (헤더: 이름/상대방/상태/D-Day · 다음 할 일(해지통보/결제) · 금액·결제 · 기간·갱신 · 일정 · 원본 계약서 · 메모 · 자동 정리 정보 · 확인이 필요한 조항 · 이 계약에 질문하기(P2 진입점)) | `contract/[id]/index` | P0 |
 | D2 | 계약 수정 | `contract/[id]/edit` | P0 |
 | D3 | 원본 계약서 뷰어 (Signed URL, 페이지 이동) | `contract/[id]/document` | P0 |
 | D4 | AI 체크 상세 + 원문 근거 + "캘린더에 등록" | `contract/[id]/review/[reviewId]` | P1 |
@@ -231,6 +318,24 @@ end_date 없음(무기한)                                     → 진행중 (D-
 ---
 
 ## 4. 데이터베이스 스키마
+
+### 4.0 구현 범위 (개정 1)
+
+아래 전체 스키마는 **장기 구조로 문서에 유지**하되, 실제 구현은 단계적으로 한다. 목표는 완벽한 모델보다 빠른 MVP 검증.
+
+| 단계 | 테이블 | 비고 |
+|---|---|---|
+| **P0 (V1 최초 구현)** | `profiles`, `contracts`, `contract_documents`, `contract_payments`, `contract_events`, `analysis_jobs` | |
+| P1 / 필요 시 | `contract_ai_reviews`, `contract_field_sources`, `contract_notes`, `notification_rules`, `push_tokens` | |
+| 범위 밖(P2) | `contract_parties`(상세 당사자), `notifications`(발송 큐), `contract_shares`, `contract_groups` | |
+
+P0만으로 동작시키기 위한 임시 대체:
+- AI 체크 결과·필드 근거 → `analysis_jobs.result` JSON에서 읽음 (P1에서 `contract_ai_reviews`/`contract_field_sources`로 정규화)
+- 메모 → `contracts.memo` 단일 필드
+- 계약별 알림 on/off → `contracts.notifications_enabled` + `contract_events.notification_enabled` (오프셋 90/30/7일은 앱 상수)
+- 상대방 → `contracts.counterparty` 텍스트
+
+Step 1~4(현재 범위)에서는 DB를 만들지 않는다. 같은 형태의 **TypeScript 타입 + 인메모리 mock 저장소**로 구현하고, Step 5에서 위 P0 테이블로 옮긴다.
 
 ### 4.1 엔티티 관계
 
@@ -563,6 +668,33 @@ create policy "own folder delete" on storage.objects for delete to authenticated
 
 > 자동차보험 결제 방식(연납/월납)은 예시에 명시되지 않아 연납으로 가정했습니다(추측입니다).
 
+### 4.8 계약 지갑 확장: 계약 묶음(`contract_groups`) — V1 미구현
+
+장기적으로 여러 계약을 하나의 자산/대상 아래 묶는다.
+
+```
+Tesla Model Y  → 자동차보험, 자동차 할부, 보증 계약
+우리 집         → 임대차 계약, 전세대출, 보증보험, 인터넷
+사업            → OEM 계약, 물류 계약, 유통 계약
+```
+
+향후 마이그레이션안 (지금 테이블을 만들지 않음):
+```sql
+create type group_kind as enum ('vehicle','home','business','family','other');
+create table contract_groups (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  kind group_kind not null default 'other',
+  name text not null,            -- 'Tesla Model Y', '우리 집'
+  icon text, sort_order smallint not null default 0,
+  created_at timestamptz not null default now()
+);
+alter table contracts add column group_id uuid references contract_groups(id) on delete set null;
+```
+- 1계약 : 1그룹(nullable FK)으로 시작. 한 계약이 여러 그룹에 속해야 하면 그때 조인 테이블 `contract_group_members`로 전환.
+- 지금 지켜야 할 것: 지출/일정 집계 함수를 "계약 배열 → 결과" 형태로 작성해 두면 그룹 단위 집계가 필터 하나로 가능. 화면 코드에 "전체 계약" 가정을 하드코딩하지 않는다.
+- 사업자 모드(P2)의 `workspace_id`와는 별개 개념(그룹 = 사용자 내 분류, workspace = 소유 주체).
+
 ---
 
 ## 5. 폴더/파일 구조
@@ -573,7 +705,7 @@ pacto/
 │  ├─ _layout.tsx                      # Providers: QueryClient, Theme, Auth, SafeArea
 │  ├─ index.tsx                        # 세션 게이트 → (auth) or (tabs)
 │  ├─ (auth)/  _layout.tsx onboarding.tsx welcome.tsx sign-in.tsx sign-up.tsx reset-password.tsx
-│  ├─ (tabs)/  _layout.tsx index.tsx contracts.tsx calendar.tsx ai.tsx my.tsx
+│  ├─ (tabs)/  _layout.tsx index.tsx contracts.tsx add.tsx(+ 버튼, 등록 모달 오픈) calendar.tsx my.tsx   # AI 탭 없음
 │  ├─ register/  _layout.tsx(modal) index.tsx photos.tsx analyzing.tsx review.tsx manual.tsx
 │  ├─ contract/[id]/  index.tsx edit.tsx document.tsx notifications.tsx event.tsx ask.tsx(P2)
 │  ├─ notifications.tsx
@@ -592,7 +724,7 @@ pacto/
 │  │  ├─ calendar/      useMonthEvents.ts
 │  │  ├─ spending/      useMonthlySpending.ts
 │  │  ├─ notifications/ queries.ts push.ts(P1)
-│  │  └─ ai/            (P2 ask 구조)
+│  │  └─ ai/            (P2 ask 구조 — 계약 상세 내부에서만 사용)
 │  ├─ domain/       # 순수 TS — RN/Supabase import 금지, 100% 단위 테스트 대상
 │  │  ├─ dates.ts           todayInSeoul, clampDayOfMonth, diffDays
 │  │  ├─ dday.ts            formatDDay ('D-7', 'D-Day', 'D+3')
@@ -603,6 +735,7 @@ pacto/
 │  │  └─ __tests__/
 │  ├─ data/
 │  │  ├─ repository.ts      ContractRepository 인터페이스
+│  │  ├─ ai/                AIProvider 인터페이스 + MockAIProvider (Step 1~4는 mock만)
 │  │  ├─ mock/              mockContracts.ts MockContractRepository.ts
 │  │  └─ supabase/          client.ts SupabaseContractRepository.ts
 │  ├─ shared/schemas/       contract.ts extraction.ts  (Zod — Edge Function과 공유 대상)
@@ -635,8 +768,12 @@ pacto/
 
 ## 6. 디자인 시스템 방향 (Step 3에서 상세화)
 
-- 배경 `#FFFFFF`, 섹션 배경 `#F5F6F8` 정도의 아주 옅은 회색, 본문 `#191F28` 계열 진회색.
-- Primary: 채도 낮은 **딥 네이비/블루 1색** (예: `#1E3A8A` 계열 — 확정 아님, 시안 비교 후 결정). 보라색·그라데이션·네온 금지.
+**톤: 법률사무소가 아니라 금융/자산관리 앱.** 첫 화면 인상 = "내 계약을 보관하고 관리하는 금융 지갑".
+
+- 화이트 중심. 배경 `#FFFFFF`, 섹션 구분 배경 `#F4F6F9` 정도의 아주 옅은 회색, 본문 `#191F28` 계열 진회색.
+- Primary: **딥 네이비 1색** (`#14306B` 전후, 인터랙션은 같은 계열 블루 `#2457C5` 전후 — Step 3 토큰에서 확정, 이후 조정 가능). 보라색·그라데이션·네온 금지.
+- 강조 대상은 **D-Day와 금액**. 그 외 요소는 무채색으로 물러나게.
+- AI 관련 UI에 반짝이(✨)·보라 계열·로봇 아이콘 등 "AI 앱" 시그널 사용 금지. "자동 정리" 같은 기능 언어 사용.
 - 시맨틱: 주의 필요 = 레드 계열, 확인 필요 = 앰버 계열, 일반 = 그레이. 색만으로 구분하지 않고 라벨 텍스트 병기(접근성).
 - 타이포: Pretendard. 금액/D-Day는 크게·굵게·`tabular-nums`. 홈 지출 금액은 화면에서 가장 큰 텍스트.
 - 카드는 "그룹이 필요한 곳"에만. 목록은 구분선 기반 ListRow 중심.
@@ -693,14 +830,16 @@ pacto/
 
 ---
 
-## 9. 결정이 필요한 질문
+## 9. 결정 사항 (개정 1에서 확정)
 
-1. **저장소**: 현재 `kopick` 저장소는 다른 프로젝트입니다. (a) 새 저장소 `pacto` 생성 *(권장)*, (b) 이 저장소 안 `pacto/` 하위 폴더, (c) KOPICK 코드를 제거하고 이 저장소를 PACTO로 전환 — 어느 쪽인가요? (이 세션의 GitHub 접근 범위는 `gunong1/kopick`뿐이라 (a)는 저장소를 만들어 연결해 주셔야 합니다)
-2. **홈 지출 숫자**: "이번 달 실제 결제 예정액"(연납 보험이 있는 달에 급증) vs "월 환산액" — 메인을 무엇으로 할까요? (제안: 실제 결제 예정액 메인 + 월평균 보조)
-3. **로그인 수단**: 이메일 + Apple + Kakao 조합으로 할까요? (Google 포함 여부)
-4. **AI 프로바이더 1순위**: 초기 연결 대상(Gemini/OpenAI/Claude)과 API 키 보유 여부. 결정 전까지 mock 프로바이더로 진행 가능
-5. **Supabase 프로젝트**: 이미 있는지, 리전(서울 권장)
-6. **브랜드 색상/로고**: 정해진 것이 있는지, 없으면 Step 3에서 시안 2~3개 제안
+| 질문 | 결정 |
+|---|---|
+| 저장소 | 신규 저장소 `pacto`. 접근 가능해질 때까지 로컬 프로젝트로 진행, Git 원격 연결 보류 |
+| 홈 지출 숫자 | 이번 달 실제 결제 예정액 (보조: 월평균, 연간 예상) |
+| 로그인 | 이메일 / Apple / Google. Kakao는 P1 이후 검토 |
+| AI 프로바이더 | Step 1~4는 mock. UI/UX 검토 후 추출 성능 테스트로 선택 |
+| Supabase | Step 5에서 결정 (서울 리전 권장) |
+| 브랜드 | 화이트 + 딥 네이비, 금융 앱 톤 (§6) |
 
 ---
 
@@ -708,33 +847,36 @@ pacto/
 
 각 Step 종료 조건(DoD)을 만족해야 다음 Step으로 이동. 검증 = 이 컨테이너에서 가능한 자동 검증 + 사용자 기기 확인 필요 항목 구분.
 
-### Step 1. 프로젝트 셋업
-- 1.1 `create-expo-app`(SDK 57, TS) + Expo Router 탭 템플릿 정리
-- 1.2 TS strict, ESLint/Prettier, path alias(`@/`)
-- 1.3 jest-expo 설정, 샘플 테스트
-- 1.4 `.env.example`, `app.config.ts`(번들 ID 등 placeholder)
-- **DoD**: `tsc --noEmit`, `lint`, `test` 통과 · `expo start --web` 기동 · 사용자 기기 Expo Go에서 빈 탭 5개 확인
+> **현재 승인된 구현 범위: Step 1~4.** Supabase, 실제 AI, 파일 업로드(Storage), Push Notification은 연결하지 않는다. Step 4 완료 후 실제 기기 UX 검토·승인을 받고 Step 5로 진행.
 
-### Step 2. 데이터 모델 (클라이언트 타입 + domain)
-- 2.1 `domain/` 타입 정의(Contract, Payment, Event, Review …)
-- 2.2 `dates.ts`, `dday.ts`, `status.ts`, `schedule.ts`, `spending.ts`, `money.ts` 구현
-- 2.3 경계 테스트: 말일 보정, 윤년, D-Day 0, 자동갱신 회차, 종료 후 지출 제외, 연납 월환산
-- 2.4 Zod 스키마(`shared/schemas`) — 폼/AI 출력 공용
-- **DoD**: domain 테스트 커버리지 90%+ · §4.7 mock 표의 계산값과 테스트 일치
+### Step 1. 프로젝트 셋업
+- 1.1 로컬 `pacto/` 프로젝트 생성 (Expo SDK 57, TypeScript, Expo Router) — KOPICK 저장소와 분리
+- 1.2 TS strict, ESLint, path alias(`@/` → `src/`)
+- 1.3 jest-expo 설정
+- 1.4 앱 이름/스킴 `pacto`, `.env.example`(아직 값 없음)
+- **DoD**: `tsc --noEmit`, `lint`, `test` 통과 · 웹 프리뷰 기동
+
+### Step 2. domain 로직
+- 2.1 타입(Contract, ContractPayment, ContractEvent, ContractDocument, AnalysisJob, AiCheck)
+- 2.2 `dates`(서울 기준 오늘, 말일 보정), `dday`, `status`(상태·현재 회차 종료일·해지 통보기한), `schedule`(결제 전개·시스템 일정 생성), `spending`(이번 달 실제 결제 예정액, 월평균, 연간 예상, 카테고리 분해), `actions`(홈 "지금 처리해야 할 계약"), `money`
+- 2.3 AI 문구 금칙어 검사(`aiCopy`)
+- 2.4 Zod 스키마(계약 확인/수정 폼)
+- **DoD**: 경계값 단위 테스트 통과, §4.7 mock 계산값(D-87, D-57, D-268 등)과 일치
 
 ### Step 3. 디자인 시스템
-- 3.1 토큰(color/typography/spacing/radius), Pretendard 로드
-- 3.2 기본 컴포넌트(Text, Button, ListRow, Card, Badge, Input, DateField, AmountField, BottomSheet, EmptyState, Skeleton)
-- 3.3 PACTO 컴포넌트(DDayBadge, AmountText, StatusBadge, SeverityBadge, CategoryIcon)
-- 3.4 컴포넌트 카탈로그 화면(개발용 라우트)
-- **DoD**: 카탈로그 화면 스크린샷 검토(웹 프리뷰 Playwright 캡처) · 사용자 디자인 승인
+- 3.1 토큰(color/typography/spacing/radius) — 금융 앱 톤
+- 3.2 기본 컴포넌트(Text, Button, ListRow, Section, Badge, Chip, TextField, Segmented 등)
+- 3.3 PACTO 컴포넌트(DDayBadge, Amount, StatusBadge, CategoryIcon, SeverityLabel, MonthGrid)
+- **DoD**: 웹 프리뷰 스크린샷으로 확인 (폰트는 시스템 폰트로 시작, Pretendard는 기기 검토 시 결정)
 
-### Step 4. Mock Data로 주요 화면
-- 4.1 `ContractRepository` 인터페이스 + `MockContractRepository` + TanStack Query 훅
-- 4.2 홈(T1), 계약 목록(T2), 계약 상세(D1), 캘린더(T3), MY(T5) 골격, AI 탭 placeholder(T4)
-- 4.3 등록 플로우 R1→R3→R5 (mock 분석: 2초 지연 후 고정 결과) + 직접 입력 R6
-- 4.4 계약 수정(D2), 상태 변경(D7), 일정 추가(D6), 알림 설정(D5) UI
-- **DoD**: mock으로 "등록→확인/수정→저장→홈/목록/캘린더 반영" 전 흐름 동작 · 화면 테스트 몇 개 · 사용자 기기 UX 확인
+### Step 4. Mock Data 기반 주요 화면
+- 4.1 `ContractRepository` 인터페이스 + 인메모리 `MockContractRepository` + TanStack Query 훅 (앱 재시작 시 초기 mock으로 리셋)
+- 4.2 `AIProvider` 인터페이스 + `MockAIProvider`(지연 후 고정 추출 결과 + 확인이 필요한 조항)
+- 4.3 탭: 홈 / 계약 / (+) / 캘린더 / MY, 홈 우측 상단 알림함(예정 알림 목록)
+- 4.4 계약 상세(다음 할 일, 금액·결제, 기간·갱신, 일정, 원본, 메모, 자동 정리 정보, 확인이 필요한 조항 → 일정 등록 제안, 질문하기 진입점)
+- 4.5 등록: 방식 선택(PDF/사진/직접 입력) → 기기에서 파일 선택만(업로드 없음) → "계약서를 확인하고 있습니다." → "자동으로 정리한 계약정보를 확인해주세요." 확인/수정 폼 → [계약 저장]
+- 4.6 시작 화면(로그인 UI: 이메일/Apple/Google — 모두 mock 진입)
+- **DoD — 아래 흐름이 mock으로 동작**: ① 앱 실행 ② 홈 확인 ③ 계약 목록 ④ 계약 상세 ⑤ 계약 등록 ⑥ AI mock 결과 확인/수정 ⑦ 저장 ⑧ 홈/목록 반영 ⑨ 캘린더 반영 ⑩ 월 지출 반영. 자동 검증: domain 테스트 + 저장소 통합 테스트 + 웹 프리뷰 E2E 스크린샷. 이후 사용자 실기기(Expo Go) UX 검토.
 
 ### Step 5. Supabase 연결
 - 5.1 Supabase CLI 로컬 환경, migrations 0001~0003(스키마/RLS/Storage), seed
@@ -746,7 +888,7 @@ pacto/
 ### Step 6. 인증
 - 6.1 온보딩(S02), 이메일 가입/로그인/재설정(S04~S06), 동의 기록(profiles)
 - 6.2 세션 게이트, 로그아웃
-- 6.3 소셜 로그인(Apple/Kakao) — dev build 필요 시 Step 11 전후로 이동 가능
+- 6.3 소셜 로그인(Apple/Google, Kakao는 P1 이후) — dev build 필요 시 Step 11 전후로 이동 가능
 - 6.4 회원 탈퇴 `delete-account` 함수 + E3 화면
 - **DoD**: 가입→로그인→재실행 시 세션 유지→로그아웃→탈퇴 후 DB/Storage 데이터 0건 확인
 
